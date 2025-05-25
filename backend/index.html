@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chatbot with Function Calling</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  #chat { border: 1px solid #ccc; height: 400px; overflow-y: scroll; padding: 10px; }
+  .message { margin: 10px 0; }
+  .user { color: blue; }
+  .assistant { color: green; }
+</style>
+</head>
+<body>
+<h2>Chatbot with Function Calling (OpenAI GPT-4)</h2>
+<div id="chat"></div>
+<input type="text" id="input" placeholder="Ask me something..." style="width: 80%;" />
+<button onclick="sendMessage()">Send</button>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

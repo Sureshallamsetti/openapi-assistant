@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCT API Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #4b5563;
+      border-radius: 8px;
+    }
+    .typing::after {
+      content: "⠋";
+      animation: blink 1s infinite steps(1, start);
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 0.2; }
+      50% { opacity: 1; }
+    }
+    .markdown a {
+      color: #60a5fa;
+      text-decoration: underline;
+    }
+    .markdown code {
+      background: #1e293b;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    /* Input box max width and center form */
+    #chat-input {
+      max-width: 600px;
+      font-size: 0.875rem;
+    }
+    #chat-form {
+      margin: 0 auto;
+      max-width: 640px;
+    }
+  </style>
+</head>
+<body class="h-full flex">
+
+  <!-- Sidebar -->
+  <aside class="w-64 bg-slate-800 border-r border-slate-700 flex flex-col p-4 space-y-4">
+    <button onclick="newChat()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-semibold text-left">
+      + New Chat
+    </button>
+    <div id="chat-list" class="flex-1 overflow-y-auto space-y-2"></div>
+  </aside>
+
+  <!-- Main Chat Window -->
+  <div class="flex-1 flex flex-col">
+    <!-- Header -->
+    <header class="flex items-center justify-between px-6 py-4 bg-slate-800 border-b border-slate-700">
+      <div class="flex items-center space-x-3">
+        <span class="text-2xl">🤖</span>
+        <h1 class="text-xl font-semibold">DCT API Assistant</h1>
+      </div>
+      <button onclick="clearHistory()" class="text-sm text-red-400 hover:text-red-300">Clear Current Chat</button>
+    </header>
+
+    <!-- Chat Area -->
+    <main id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-4"></main>
+
+    <!-- Input -->
+    <footer class="p-4 bg-slate-800 border-t border-slate-700">
+      <form id="chat-form" class="flex gap-2">
+        <input id="chat-input" type="text" required placeholder="Type your message..." class="flex-1 px-5 py-2 rounded-lg text-black focus:outline-none" />
+        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-semibold">
+          Send
+        </button>
+      </form>
+    </footer>
+  </div>
+
+  <!-- Script -->
+  <script>
+    const chatContainer = document.getElementById('chat-container');
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+    const chatList = document.getElementById('chat-list');
+
+    let currentChatId = null;
+    const STORAGE_INDEX_KEY = 'chat_sessions';
+
+    function getChatKey(chatId) {
+      return `chat_history_${chatId}`;
+    }
+
+    function formatTimestamp() {
+      const now = new Date();
+      return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function saveToHistory(messageObj) {
+      const key = getChatKey(currentChatId);
+      const history = JSON.parse(localStorage.getItem(key) || '[]');
+      history.push(messageObj);
+      localStorage.setItem(key, JSON.stringify(history));
+    }
+
+    function loadChatList() {
+      const sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
+      chatList.innerHTML = '';
+      sessions.forEach(session => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 flex justify-between items-center';
+        btn.textContent = session.title;
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '🗑️';
+        delBtn.title = 'Delete Chat';
+        delBtn.className = 'ml-2 text-red-500 hover:text-red-400';
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteChat(session.id);
+        };
+
+        btn.appendChild(delBtn);
+        btn.onclick = () => loadChat(session.id);
+        chatList.appendChild(btn);
+      });
+    }
+
+    function deleteChat(chatId) {
+      // Remove chat from sessions
+      let sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
+      sessions = sessions.filter(s => s.id !== chatId);
+      localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify(sessions));
+      // Remove chat history
+      localStorage.removeItem(getChatKey(chatId));
+      if (chatId === currentChatId) {
+        currentChatId = null;
+        chatContainer.innerHTML = '';
+      }
+      loadChatList();
+    }
+
+    function loadChat(chatId) {
+      currentChatId = chatId;
+      chatContainer.innerHTML = '';
+      const history = JSON.parse(localStorage.getItem(getChatKey(chatId)) || '[]');
+      history.forEach(msg => {
+        appendMessage(msg.sender, msg.text, false, msg.timestamp);
+      });
+    }
+
+    function clearHistory() {
+      if (currentChatId) {
+        localStorage.removeItem(getChatKey(currentChatId));
+        chatContainer.innerHTML = '';
+      }
+    }
+
+    function newChat(title = null) {
+      const newId = Date.now().toString();
+      const chatTitle = title || `Chat ${new Date().toLocaleString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
+      const sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
+      sessions.push({ id: newId, title: chatTitle });
+      localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify(sessions));
+      currentChatId = newId;
+      chatContainer.innerHTML = '';
+      loadChatList();
+    }
+
+    function appendMessage(sender, text, isTyping = false, timestamp = null) {
+      const row = document.createElement('div');
+      row.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+
+      const avatar = document.createElement('div');
+      avatar.className = 'w-10 h-10 bg-slate-700 flex items-center justify-center rounded-full text-xl';
+      avatar.textContent = sender === 'user' ? '🧑' : '🤖';
+
+      const msgWrapper = document.createElement('div');
+      msgWrapper.className = `ml-2 max-w-lg px-4 py-3 rounded-xl shadow whitespace-pre-wrap markdown ${
+        sender === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-white'
+      }`;
+
+      msgWrapper.innerHTML = isTyping ? 'Typing...' : marked.parse(text || '');
+
+      const messageContainer = document.createElement('div');
+      messageContainer.className = 'flex flex-col space-y-1';
+      messageContainer.appendChild(msgWrapper);
+
+      if (!isTyping && timestamp) {
+        const time = document.createElement('span');
+        time.className = 'text-xs text-gray-400 mt-1';
+        time.textContent = timestamp;
+        messageContainer.appendChild(time);
+      }
+
+      if (sender === 'user') {
+        row.appendChild(messageContainer);
+        row.appendChild(avatar);
+      } else {
+        row.appendChild(avatar);
+        row.appendChild(messageContainer);
+      }
+
+      chatContainer.appendChild(row);
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+      return msgWrapper;
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const message = chatInput.value.trim();
+      if (!message) return;
+
+      if (!currentChatId) {
+        // Create new chat automatically if none exists
+        newChat();
+      }
+
+      const timestamp = formatTimestamp();
+      appendMessage('user', message, false, timestamp);
+      saveToHistory({ sender: 'user', text: message, timestamp });
+
+      chatInput.value = '';
+      const typingMsg = appendMessage('bot', '', true);
+
+      try {
+        const res = await fetch('http://localhost:8300/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message })
+        });
+
+        const data = await res.json();
+        typingMsg.classList.remove('typing');
+        typingMsg.innerHTML = marked.parse(data.reply || 'No reply.');
+        const botTimestamp = formatTimestamp();
+        const time = document.createElement('span');
+        time.className = 'text-xs text-gray-400 mt-1';
+        time.textContent = botTimestamp;
+        typingMsg.parentElement.appendChild(time);
+        saveToHistory({ sender: 'bot', text: data.reply, timestamp: botTimestamp });
+
+        // Update chat title from first user message if still default
+        const sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
+        const currentSession = sessions.find(s => s.id === currentChatId);
+        if (currentSession && currentSession.title.startsWith('Chat ')) {
+          currentSession.title = message.length > 20 ? message.slice(0, 20) + '…' : message;
+          localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify(sessions));
+          loadChatList();
+        }
+
+      } catch (err) {
+        typingMsg.classList.remove('typing');
+        typingMsg.textContent = '⚠️ Error contacting the server.';
+      }
+    });
+
+    // On page load
+    loadChatList();
+    // Removed auto newChat on load - user clicks to create
+
+  </script>
+
+</body>
+</html>

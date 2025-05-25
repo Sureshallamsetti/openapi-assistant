@@ -1,0 +1,99 @@
+2025-05-25 13:28:56,991 [WARNING]  * Debugger is active!
+2025-05-25 13:28:57,008 [INFO]  * Debugger PIN: 115-832-523
+2025-05-25 13:28:57,050 [INFO] 127.0.0.1 - - [25/May/2025 13:28:57] "GET / HTTP/1.1" 200 -
+2025-05-25 13:29:05,019 [INFO] User message: Hi
+2025-05-25 13:29:07,242 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:29:07,263 [INFO] Assistant reply: Hello! How can I assist you today?
+2025-05-25 13:29:07,264 [INFO] 127.0.0.1 - - [25/May/2025 13:29:07] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:29:25,086 [INFO] User message: show me list of the bookmarks
+2025-05-25 13:29:25,940 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:29:25,952 [INFO] Calling tool: get_bookmarks
+2025-05-25 13:29:25,952 [INFO] Arguments for get_bookmarks: {"limit":10}
+2025-05-25 13:29:26,234 [INFO] Result from get_bookmarks: {
+  "items": [],
+  "response_metadata": {
+    "total": 0
+  }
+}
+2025-05-25 13:29:26,234 [INFO] Assistant reply: {
+  "items": [],
+  "response_metadata": {
+    "total": 0
+  }
+}
+2025-05-25 13:29:26,235 [INFO] 127.0.0.1 - - [25/May/2025 13:29:26] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:29:56,631 [INFO] User message: update the license to ENTERPRISE
+2025-05-25 13:29:57,591 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:29:57,593 [INFO] Calling tool: change_license
+2025-05-25 13:29:57,594 [INFO] Arguments for change_license: {"tier":"ENTERPRISE"}
+2025-05-25 13:29:57,640 [INFO] Result from change_license: {
+  "error": "API request failed",
+  "details": "400 Client Error:  for url: http://localhost:8080/v3/management/license/change-license",
+  "status_code": 400,
+  "response_text": "{\"error\":\"failed\",\"error_description\":\"Can't change the license to the current tier.\"}"
+}
+2025-05-25 13:29:57,640 [INFO] Assistant reply: {
+  "error": "API request failed",
+  "details": "400 Client Error:  for url: http://localhost:8080/v3/management/license/change-license",
+  "status_code": 400,
+  "response_text": "{\"error\":\"failed\",\"error_description\":\"Can't change the license to the current tier.\"}"
+}
+2025-05-25 13:29:57,641 [INFO] 127.0.0.1 - - [25/May/2025 13:29:57] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:30:28,686 [INFO] User message: get me the current license
+2025-05-25 13:30:29,624 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:30:29,628 [INFO] Calling tool: get_license
+2025-05-25 13:30:29,682 [INFO] Result from get_license: {
+  "tier": "ENTERPRISE",
+  "virtualization_engine_count": 0,
+  "masking_engine_count": 0
+}
+2025-05-25 13:30:29,682 [INFO] Assistant reply: {
+  "tier": "ENTERPRISE",
+  "virtualization_engine_count": 0,
+  "masking_engine_count": 0
+}
+2025-05-25 13:30:29,683 [INFO] 127.0.0.1 - - [25/May/2025 13:30:29] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:30:40,780 [INFO] User message: change the license to TIER
+2025-05-25 13:30:42,414 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:30:42,415 [INFO] Assistant reply: Could you please specify the tier to which you would like to change the license?
+2025-05-25 13:30:42,415 [INFO] 127.0.0.1 - - [25/May/2025 13:30:42] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:31:32,775 [INFO] User message: CORE
+2025-05-25 13:31:34,283 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:31:34,284 [INFO] Assistant reply: I'm unable to change the license tier at the moment. If you have any other questions or need further assistance, please let me know!
+2025-05-25 13:31:34,285 [INFO] 127.0.0.1 - - [25/May/2025 13:31:34] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:31:56,813 [INFO] User message: change the license to CORE
+2025-05-25 13:31:57,606 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:31:57,609 [INFO] Calling tool: change_license
+2025-05-25 13:31:57,609 [INFO] Arguments for change_license: {"tier":"CORE"}
+2025-05-25 13:31:57,679 [INFO] Result from change_license: {
+  "error": "API request failed",
+  "details": "Expecting value: line 1 column 1 (char 0)",
+  "status_code": null,
+  "response_text": null
+}
+2025-05-25 13:31:57,679 [INFO] Assistant reply: {
+  "error": "API request failed",
+  "details": "Expecting value: line 1 column 1 (char 0)",
+  "status_code": null,
+  "response_text": null
+}
+2025-05-25 13:31:57,680 [INFO] 127.0.0.1 - - [25/May/2025 13:31:57] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:32:09,000 [INFO] User message: get me the current license
+2025-05-25 13:32:14,660 [INFO] HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2025-05-25 13:32:14,663 [INFO] Calling tool: get_license
+2025-05-25 13:32:14,727 [INFO] Result from get_license: {
+  "tier": "CORE",
+  "virtualization_engine_count": 0,
+  "masking_engine_count": 0,
+  "virtualization_engine_count_limit": 2,
+  "masking_engine_count_limit": 1
+}
+2025-05-25 13:32:14,727 [INFO] Assistant reply: {
+  "tier": "CORE",
+  "virtualization_engine_count": 0,
+  "masking_engine_count": 0,
+  "virtualization_engine_count_limit": 2,
+  "masking_engine_count_limit": 1
+}
+2025-05-25 13:32:14,727 [INFO] 127.0.0.1 - - [25/May/2025 13:32:14] "POST /chat HTTP/1.1" 200 -
+2025-05-25 13:36:20,892 [INFO]  * Detected change in '/Users/suresh.allamsetti/openAI assistant/backend/app.py', reloading
