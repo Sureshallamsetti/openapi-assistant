@@ -3,13 +3,18 @@ import json
 import faiss
 import numpy as np
 import hashlib
+import importlib
+import generated_tools
 from sentence_transformers import SentenceTransformer
 
 # Config
-SCHEMA_PATH = "functions_schema.json"
-INDEX_PATH = "tools.index"
-EMBEDDINGS_PATH = "tool_embeddings.npy"
-HASH_PATH = "tools.hash"
+SCHEMA_PATH = "tools/functions_schema.json"
+VECTOR_DIR = "vector"
+os.makedirs(VECTOR_DIR, exist_ok=True)
+
+INDEX_PATH = os.path.join(VECTOR_DIR, "tools.index")
+EMBEDDINGS_PATH = os.path.join(VECTOR_DIR, "tool_embeddings.npy")
+HASH_PATH = os.path.join(VECTOR_DIR, "tools.hash")
 DIM = 768  # Embedding size
 
 # Load model
@@ -36,7 +41,7 @@ need_rebuild = (current_hash != stored_hash) or not os.path.exists(INDEX_PATH)
 
 if need_rebuild:
     print("🛠️ Rebuilding FAISS index and embeddings...")
-    
+    importlib.reload(generated_tools)
     # Compute embeddings from tool descriptions
     embeddings = model.encode(
         [tool["description"] for tool in functions_schema],

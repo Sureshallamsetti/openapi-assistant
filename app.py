@@ -8,6 +8,7 @@ from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolPara
 from langchain.tools.base import BaseTool
 import vector_tools
 import generated_tools
+from dotenv import load_dotenv
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
+load_dotenv()
 # Configuration
 class Config:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
