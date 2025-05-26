@@ -329,32 +329,30 @@ def generate_tools_from_json(tools_json_path: str) -> None:
 
 # Schema extraction functions
 def parse_default(value):
-    """Handle some common default value types for JSON schema defaults."""
+    """Handle default value types for JSON schema defaults."""
     if isinstance(value, ast.Constant):
         return value.value
-    if isinstance(value, ast.NameConstant):
-        return value.value
-    if isinstance(value, ast.Str):
-        return value.s
-    if isinstance(value, ast.Num):
-        return value.n
     return None
 
 def get_annotation(annotation) -> Optional[str]:
-    """Return annotation name as string (simple version)."""
+    """Extract type annotation as string."""
     if isinstance(annotation, ast.Name):
-        return annotation.id
+        return annotation.id  # e.g., 'str', 'bool', 'Any'
     elif isinstance(annotation, ast.Subscript):
-        if isinstance(annotation.value, ast.Name):
-            return annotation.value.id
-        else:
-            return None
+        if isinstance(annotation.value, ast.Name) and annotation.value.id == "Optional":
+            if isinstance(annotation.slice, ast.Name):
+                return f"Optional[{annotation.slice.id}]"
+            elif isinstance(annotation.slice, ast.Subscript):
+                base_type = get_annotation(annotation.slice)
+                return f"Optional[{base_type}]"
+        elif isinstance(annotation.value, ast.Name):
+            return annotation.value.id  # Handle List, Dict, etc.
     elif isinstance(annotation, ast.Attribute):
         return annotation.attr
     return None
 
 def get_type_schema(py_type: Optional[str]):
-    """Map simple Python types to JSON Schema types."""
+    """Map Python types to JSON Schema types."""
     mapping = {
         "str": {"type": "string"},
         "int": {"type": "integer"},
@@ -362,16 +360,16 @@ def get_type_schema(py_type: Optional[str]):
         "bool": {"type": "boolean"},
         "dict": {"type": "object"},
         "list": {"type": "array"},
+        "Any": {"type": "string"},
         "Optional[str]": {"type": ["string", "null"]},
         "Optional[int]": {"type": ["integer", "null"]},
         "Optional[float]": {"type": ["number", "null"]},
         "Optional[bool]": {"type": ["boolean", "null"]},
         "Optional[dict]": {"type": ["object", "null"]},
         "Optional[list]": {"type": ["array", "null"]},
-        "Any": {"type": "string"},
     }
     if py_type is None:
-        return {"type": "string"}  # default fallback
+        return {"type": "string"}
     return mapping.get(py_type, {"type": "string"})
 
 def extract_schema_from_python(filename: str) -> List[Dict]:
@@ -391,6 +389,8 @@ def extract_schema_from_python(filename: str) -> List[Dict]:
             if "tool" in decorators:
                 func_name = node.name
                 docstring = ast.get_docstring(node) or ""
+                # Extract only the first line of the docstring (the endpoint)
+                description = docstring.strip().split('\n')[0].strip()
 
                 # Build properties dict
                 properties = {}
@@ -416,10 +416,10 @@ def extract_schema_from_python(filename: str) -> List[Dict]:
                     param_info = schema_type.copy()
                     param_info["description"] = f"Parameter {arg_name} of type {annotation or 'string'}"
 
-                    if default:
+                    if default is not None:  # Check if default exists, including falsy values
                         default_val = parse_default(default)
                         if default_val is not None:
-                            param_info["default"] = str(default_val)
+                            param_info["default"] = default_val  # Use raw value
                     else:
                         required.append(arg_name)
 
@@ -427,7 +427,7 @@ def extract_schema_from_python(filename: str) -> List[Dict]:
 
                 tool_schema = {
                     "name": func_name,
-                    "description": docstring.strip(),
+                    "description": description,
                     "parameters": {
                         "type": "object",
                         "properties": properties,
