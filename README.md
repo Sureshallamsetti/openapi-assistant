@@ -18,7 +18,7 @@
    ```
 
 4. Configure your environment:
-   - Add the `base_url`, `headers`, and OpenAPI API key as needed.
+   - Add the `BASE_URL`, `HEADERS`, and OPENAI_API_KEY as needed.
 
 5. Generate tools from the OpenAPI spec:
    ```bash
