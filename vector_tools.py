@@ -4,7 +4,7 @@ import faiss
 import numpy as np
 import hashlib
 import importlib
-import generated_tools
+from tools import generated_tools
 from sentence_transformers import SentenceTransformer
 
 # Config

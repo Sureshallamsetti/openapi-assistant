@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from langchain.tools.base import BaseTool
 import vector_tools
-import generated_tools
+from tools import generated_tools
 from dotenv import load_dotenv
 
 # Configure logging
