@@ -4,12 +4,12 @@
 
 1. Clone the project:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/Sureshallamsetti/openapi-assistant.git
    ```
 
 2. Change directory:
    ```bash
-   cd openai_assistant
+   cd openapi-assistant
    ```
 
 3. Install required Python packages:
