@@ -14,8 +14,8 @@ API Tools Generator
 Generates Python tools from OpenAPI spec or tools.json and extracts JSON schema.
 
 Usage:
-    python script.py api.yaml      # From OpenAPI YAML
-    python script.py tools.json    # From tools JSON
+    python tools_generator.py api.yaml      # From OpenAPI YAML
+    python tools_generator.py tools.json    # From tools JSON
 """
 
 def resolve_ref(ref, components):
@@ -46,6 +46,7 @@ def parse_schema(schema, components):
         tool_props[prop_name] = {
             "type": prop_schema.get("type", "string"),
             "description": prop_schema.get("description", ""),
+            "default": prop_schema.get("default", ""),
             "in": "body"
         }
 
@@ -89,6 +90,7 @@ def openapi_to_tools(openapi_spec):
                 tool_params["properties"][name] = {
                     "type": schema.get("type", "string"),  
                     "description": param.get("description", ""),
+                    "default": param.get("default", ""),
                     "in": param.get("in", "query")
                 }
 
@@ -193,7 +195,19 @@ def generate_tool_function(tool: Dict) -> str:
         if param_name in required:
             required_params.append(f"{safe_name}: {param_type}")
         else:
-            optional_params.append(f"{safe_name}: Optional[{param_type}] = None")
+            default_value = schema.get("default")
+            if default_value is not None and default_value != "":
+                # Properly format default values for different types
+                if isinstance(default_value, str):
+                    default_str = f'"{default_value}"'
+                elif isinstance(default_value, bool):
+                    default_str = str(default_value)  # True / False
+                else:
+                    default_str = str(default_value)
+                optional_params.append(f"{safe_name}: Optional[{param_type}] = {default_str}")
+            else:
+                optional_params.append(f"{safe_name}: Optional[{param_type}] = None")
+
 
     # Combine all parameters with required ones first
     func_params = required_params + optional_params
@@ -267,7 +281,8 @@ def {name}({param_str}) -> dict:
             headers=headers,
             params=params,
             json=json_data,
-            timeout=10
+            timeout=10,
+            verify=False
         )
         response.raise_for_status()
         return response.json()
