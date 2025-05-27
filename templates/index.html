@@ -71,6 +71,9 @@
     <footer class="p-4 bg-slate-800 border-t border-slate-700">
       <form id="chat-form" class="flex gap-2">
         <input id="chat-input" type="text" required placeholder="Type your message..." class="flex-1 px-5 py-2 rounded-lg text-black focus:outline-none" />
+        <button type="button" id="mic-btn" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg font-semibold">
+        🎤
+        </button>
         <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-semibold">
           Send
         </button>
@@ -255,6 +258,69 @@
         typingMsg.classList.remove('typing');
         typingMsg.textContent = '⚠️ Error contacting the server.';
       }
+    });
+
+    const micBtn = document.getElementById('mic-btn');
+
+    micBtn.addEventListener('click', () => {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert("Speech recognition not supported in this browser.");
+        return;
+      }
+
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        micBtn.textContent = '🎙️';
+      };
+
+      recognition.onresult = async (event) => {
+        micBtn.textContent = '🎤';
+        const transcript = event.results[0][0].transcript;
+        chatInput.value = transcript;
+
+        // Send transcript to /voice-chat endpoint
+        const timestamp = formatTimestamp();
+        appendMessage('user', transcript, false, timestamp);
+        saveToHistory({ sender: 'user', text: transcript, timestamp });
+
+        const typingMsg = appendMessage('bot', '', true);
+
+        try {
+          const res = await fetch('http://localhost:8300/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: transcript })
+          });
+
+          const data = await res.json();
+          typingMsg.classList.remove('typing');
+          typingMsg.innerHTML = marked.parse(data.reply || 'No reply.');
+          const botTimestamp = formatTimestamp();
+          const time = document.createElement('span');
+          time.className = 'text-xs text-gray-400 mt-1';
+          time.textContent = botTimestamp;
+          typingMsg.parentElement.appendChild(time);
+          saveToHistory({ sender: 'bot', text: data.reply, timestamp: botTimestamp });
+        } catch (err) {
+          typingMsg.classList.remove('typing');
+          typingMsg.textContent = '⚠️ Error contacting the server.';
+        }
+      };
+
+      recognition.onerror = () => {
+        micBtn.textContent = '🎤';
+        alert('Error during speech recognition.');
+      };
+
+      recognition.onend = () => {
+        micBtn.textContent = '🎤';
+      };
+
+      recognition.start();
     });
 
     // On page load
