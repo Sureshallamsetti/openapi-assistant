@@ -21,7 +21,6 @@ pip install -r requirements.txt
 Set the following environment variables:
 - `BASE_URL`
 - `HEADERS`
-- `OPENAI_API_KEY`
 
 You can export them in your terminal or store them in a `.env` file.
 
