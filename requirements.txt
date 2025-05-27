@@ -13,4 +13,4 @@ langchain-core>=0.1.47
 packaging
 SpeechRecognition
 pyaudio
-faiss-gpu
+faiss-cpu
