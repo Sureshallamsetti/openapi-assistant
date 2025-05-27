@@ -1,14 +1,14 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, Blueprint
 import os
-import openai
+import requests
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
 from langchain.tools.base import BaseTool
 import vector_tools
 from tools import generated_tools
 from dotenv import load_dotenv
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -17,23 +17,22 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 load_dotenv()
+
 # Configuration
 class Config:
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    MAX_HISTORY_LENGTH = 20  # Prevent memory issues with long conversations
-    DEFAULT_MODEL = "gpt-4o"
+    OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/v1")  # Ollama API endpoint
+    MAX_HISTORY_LENGTH = 20
+    DEFAULT_MODEL = "mistral-nemo:12b-instruct-2407-q4_0"  # Local model
     TOP_K_TOOLS = 5
 
-# Validate API key
-if not Config.OPENAI_API_KEY:
-    logger.error("OPENAI_API_KEY environment variable is not set")
-    raise ValueError("OpenAI API key is required")
-
-openai.api_key = Config.OPENAI_API_KEY
+# Validate API URL
+if not Config.OLLAMA_API_URL:
+    logger.error("OLLAMA_API_URL environment variable is not set")
+    raise ValueError("Ollama API URL is required")
 
 class ChatbotManager:
     def __init__(self):
-        self.history: List[ChatCompletionMessageParam] = [
+        self.history: List[Dict[str, Any]] = [
             {"role": "system", "content": "You are a helpful assistant with access to various tools. Use them when appropriate to provide accurate and helpful responses."}
         ]
         self.tool_functions: Dict[str, BaseTool] = {}
@@ -78,8 +77,8 @@ class ChatbotManager:
     
     def _execute_tool_call(self, tool_call) -> str:
         """Execute a single tool call and return the result"""
-        func_name = tool_call.function.name
-        raw_args = tool_call.function.arguments
+        func_name = tool_call["function"]["name"]
+        raw_args = tool_call["function"]["arguments"]
         
         func = self.tool_functions.get(func_name)
         if not func:
@@ -89,10 +88,7 @@ class ChatbotManager:
         
         try:
             # Handle parameter-less functions specially
-            if func_name == "get_license":
-                args_dict = {}
-            else:
-                args_dict = self._safe_parse_args(raw_args)
+            args_dict = self._safe_parse_args(raw_args)
             
             logger.info(f"Executing tool {func_name} with args: {args_dict}")
             
@@ -217,14 +213,7 @@ class ChatbotManager:
         """Keep conversation history within reasonable limits"""
         if len(self.history) > Config.MAX_HISTORY_LENGTH:
             # Keep system message and recent messages
-            system_msg = self.history[0]  # Keep system message
-            recent_messages = self.history[-(Config.MAX_HISTORY_LENGTH-1):]
-            self.history = [system_msg] + recent_messages
-            logger.info("Conversation history trimmed")
-        """Keep conversation history within reasonable limits"""
-        if len(self.history) > Config.MAX_HISTORY_LENGTH:
-            # Keep system message and recent messages
-            system_msg = self.history[0]  # Keep system message
+            system_msg = self.history[0]  # Keep system message 
             recent_messages = self.history[-(Config.MAX_HISTORY_LENGTH-1):]
             self.history = [system_msg] + recent_messages
             logger.info("Conversation history trimmed")
@@ -245,35 +234,38 @@ class ChatbotManager:
                 logger.warning(f"Error searching tools: {str(e)}. Proceeding without tools.")
                 tools_spec = []
             
-            # Call OpenAI API
+            # Prepare API call to Ollama
             api_params = {
                 "model": Config.DEFAULT_MODEL,
                 "messages": self.history,
+                "format": "json",  # Ensure structured output
             }
             
             if tools_spec:
                 api_params["tools"] = tools_spec
-                api_params["tool_choice"] = "auto"
             
-            response = openai.chat.completions.create(**api_params)
-            response_message = response.choices[0].message
-            tool_calls = getattr(response_message, "tool_calls", None)
+            # Call Ollama API
+            response = requests.post(
+                f"{Config.OLLAMA_API_URL}/chat/completions",
+                json=api_params,
+                timeout=30
+            )
+            response.raise_for_status()
+            response_data = response.json()
+            
+            # Parse response
+            response_message = response_data["choices"][0]["message"]
+            tool_calls = response_message.get("tool_calls")
             
             if tool_calls:
-                # Execute tool calls
+                 # Execute tool calls
                 logger.info(f"Executing {len(tool_calls)} tool calls")
                 
                 # Add the assistant's message with tool calls to history first
                 self.history.append({
                     "role": "assistant",
-                    "content": response_message.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {"name": tc.function.name, "arguments": tc.function.arguments}
-                        } for tc in tool_calls
-                    ]
+                    "content": response_message.get("content", ""),
+                    "tool_calls": tool_calls
                 })
                 
                 # Execute each tool call and add results to history
@@ -282,27 +274,34 @@ class ChatbotManager:
                     self.history.append({
                         "role": "tool",
                         "content": result,
-                        "tool_call_id": tool_call.id
+                        "tool_call_id": tool_call["id"]
                     })
                 
                 # Make a second API call to get the final response based on tool results
-                final_response = openai.chat.completions.create(
-                    model=Config.DEFAULT_MODEL,
-                    messages=self.history
+                final_response = requests.post(
+                    f"{Config.OLLAMA_API_URL}/chat/completions",
+                    json={
+                        "model": Config.DEFAULT_MODEL,
+                        "messages": self.history,
+                        "format": "json"
+                    },
+                    timeout=30
                 )
+                final_response.raise_for_status()
+                final_response_data = final_response.json()
                 
-                assistant_reply = final_response.choices[0].message.content or "I apologize, but I couldn't generate a response based on the tool results."
+                assistant_reply = final_response_data["choices"][0]["message"]["content"] or "I apologize, but I couldn't generate a response based on the tool results."
                 self.history.append({"role": "assistant", "content": assistant_reply})
                 
             else:
                 # Regular response without tools
-                assistant_reply = response_message.content or "I apologize, but I couldn't generate a response."
+                assistant_reply = response_message.get("content", "I apologize, but I couldn't generate a response.")
                 self.history.append({"role": "assistant", "content": assistant_reply})
             
             return assistant_reply
             
-        except openai.APIError as e:
-            error_msg = f"OpenAI API error: {str(e)}"
+        except requests.RequestException as e:
+            error_msg = f"Ollama API error: {str(e)}"
             logger.error(error_msg)
             return "I'm experiencing technical difficulties. Please try again later."
             
