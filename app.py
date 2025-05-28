@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, Blueprint
+from flask import Flask, request, jsonify, render_template, Blueprint, redirect, url_for, flash
 import os
 import requests
 import json
@@ -8,7 +8,11 @@ from langchain.tools.base import BaseTool
 import vector_tools
 from tools import generated_tools
 from dotenv import load_dotenv
-
+import yaml
+import subprocess
+import tempfile
+from werkzeug.utils import secure_filename
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,15 +24,72 @@ load_dotenv()
 
 # Configuration
 class Config:
-    OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/v1")  # Ollama API endpoint
+    OLLAMA_API_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434/v1")
     MAX_HISTORY_LENGTH = 20
-    DEFAULT_MODEL = "mistral-nemo:12b-instruct-2407-q4_0"  # Local model
+    DEFAULT_MODEL = "mistral-nemo:12b-instruct-2407-q4_0"
     TOP_K_TOOLS = 5
+    UPLOAD_FOLDER = 'uploads'
+    EXISTING_SPECS_FOLDER = 'api_specs'
+    ALLOWED_EXTENSIONS = {'yaml', 'yml', 'json'}
 
-# Validate API URL
-if not Config.OLLAMA_API_URL:
-    logger.error("OLLAMA_API_URL environment variable is not set")
-    raise ValueError("Ollama API URL is required")
+# Create directories if they don't exist
+os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(Config.EXISTING_SPECS_FOLDER, exist_ok=True)
+os.makedirs('tools', exist_ok=True)
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in Config.ALLOWED_EXTENSIONS
+
+def get_existing_specs():
+    """Get list of existing API specification files"""
+    specs = []
+    if os.path.exists(Config.EXISTING_SPECS_FOLDER):
+        for filename in os.listdir(Config.EXISTING_SPECS_FOLDER):
+            if allowed_file(filename):
+                filepath = os.path.join(Config.EXISTING_SPECS_FOLDER, filename)
+                specs.append({
+                    'filename': filename,
+                    'name': filename.rsplit('.', 1)[0],
+                    'size': os.path.getsize(filepath),
+                    'modified': os.path.getmtime(filepath)
+                })
+    return sorted(specs, key=lambda x: x['modified'], reverse=True)
+
+def run_tools_generator(input_file_path):
+    """Run the tools generator script on the given file"""
+    try:
+        # Import the tools generator functions
+        import sys
+        sys.path.append('.')
+        
+        # Import the main function from tools_generator
+        from tools_generator import extract_tools_from_openapi, generate_tools_from_json
+        
+        logger.info(f"Processing API spec: {input_file_path}")
+        
+        if input_file_path.endswith(('.yaml', '.yml')):
+            # OpenAPI workflow
+            tools = extract_tools_from_openapi(input_file_path)
+            
+            # Save intermediate tools.json
+            tools_json_path = "tools.json"
+            with open(tools_json_path, "w") as f:
+                json.dump(tools, f, indent=2)
+            
+            # Generate Python tools and schema
+            generate_tools_from_json(tools_json_path)
+            
+        elif input_file_path.endswith('.json'):
+            # JSON workflow
+            generate_tools_from_json(input_file_path)
+        
+        logger.info("Tools generation completed successfully")
+        return True, "Tools generated successfully"
+        
+    except Exception as e:
+        error_msg = f"Error generating tools: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
 
 class ChatbotManager:
     def __init__(self):
@@ -41,6 +102,13 @@ class ChatbotManager:
     def _initialize_tools(self):
         """Initialize tool functions from the generated_tools module"""
         try:
+            # # Reload the generated_tools module to pick up new tools
+            # import importlib,sys
+            # if 'tools.generated_tools' in sys.modules:
+            #     importlib.reload(sys.modules['tools.generated_tools'])
+            
+            # from tools import generated_tools
+            
             if not hasattr(vector_tools, 'functions_schema'):
                 logger.warning("vector_tools.functions_schema not found")
                 return
@@ -51,7 +119,7 @@ class ChatbotManager:
                 
                 if func and isinstance(func, BaseTool):
                     self.tool_functions[func_name] = func
-                    logger.info(f"Loaded tool: {func_name}")
+                    # logger.info(f"Loaded tool: {func_name}")
                 else:
                     logger.warning(f"Tool {func_name} not found or invalid in generated_tools")
                     
@@ -59,6 +127,11 @@ class ChatbotManager:
             
         except Exception as e:
             logger.error(f"Error initializing tools: {str(e)}")
+    
+    def reload_tools(self):
+        """Reload tools after new tools are generated"""
+        self.tool_functions.clear()
+        self._initialize_tools()
     
     def _get_tools_spec_for_names(self, tools_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Build tools spec JSON only for selected tool names"""
@@ -87,22 +160,17 @@ class ChatbotManager:
             return error_msg
         
         try:
-            # Handle parameter-less functions specially
             args_dict = self._safe_parse_args(raw_args)
-            
             logger.info(f"Executing tool {func_name} with args: {args_dict}")
             
             # Call using modern invoke() if available
             if hasattr(func, 'invoke'):
                 result = func.invoke(args_dict)
             else:
-                # For __call__, convert to string if needed
                 tool_input = json.dumps(args_dict) if args_dict else "{}"
                 result = func(tool_input)
             
-            # Format the result with error handling
             formatted_result = self._format_tool_result(result)
-                
             logger.info(f"Tool {func_name} executed successfully")
             return formatted_result
             
@@ -114,13 +182,10 @@ class ChatbotManager:
     def _format_tool_result(self, result) -> str:
         """Format tool result, extracting error_description from error responses"""
         try:
-            # Handle None or empty results
             if result is None:
                 return "Operation completed successfully (no data returned)"
             
-            # Handle string results that might be JSON
             if isinstance(result, str):
-                # Handle empty strings
                 if not result.strip():
                     return "Operation completed successfully (no data returned)"
                 
@@ -130,17 +195,13 @@ class ChatbotManager:
                 except json.JSONDecodeError:
                     return result
             
-            # Handle dictionary results
             if isinstance(result, dict):
-                # Handle empty dictionaries
                 if not result:
                     return "Operation completed successfully (no data returned)"
                 
-                # Check if it's an error response with error_description
                 if "error" in result and "error_description" in result:
                     return result["error_description"]
                 
-                # Check for nested error_description in response_text
                 if "response_text" in result and isinstance(result["response_text"], str):
                     try:
                         response_data = json.loads(result["response_text"])
@@ -149,7 +210,6 @@ class ChatbotManager:
                     except json.JSONDecodeError:
                         pass
                 
-                # Check for nested error_description in details
                 if "details" in result and isinstance(result["details"], str):
                     try:
                         details = json.loads(result["details"])
@@ -158,12 +218,10 @@ class ChatbotManager:
                     except json.JSONDecodeError:
                         pass
                 
-                # Check if this is a general error response - return a user-friendly message
                 if "error" in result and "status_code" in result:
                     error_msg = result.get("error", "An error occurred")
                     status_code = result.get("status_code")
                     
-                    # Try to extract more specific error from response_text
                     if "response_text" in result:
                         try:
                             response_data = json.loads(result["response_text"])
@@ -175,7 +233,6 @@ class ChatbotManager:
                         except json.JSONDecodeError:
                             pass
                     
-                    # Return a cleaned up error message
                     if status_code == 401:
                         return "Unauthorized access - please check your permissions or license"
                     elif status_code == 403:
@@ -185,24 +242,18 @@ class ChatbotManager:
                     else:
                         return f"API Error: {error_msg}"
                 
-                # Check if this is a success response with status_code 200 but empty data
                 if "status_code" in result and result["status_code"] == 200:
-                    # Check if response_text is empty or contains empty data
                     response_text = result.get("response_text", "")
                     if not response_text or response_text.strip() in ["", "null", "[]", "{}"]:
                         return "Operation completed successfully (no data returned)"
                 
-                # Return formatted JSON for non-error responses
                 return json.dumps(result, indent=2)
             
-            # Handle list results
             if isinstance(result, list):
-                # Handle empty lists
                 if not result:
                     return "Operation completed successfully (no data returned)"
                 return json.dumps(result, indent=2)
             
-            # Return string representation for other types
             return str(result)
             
         except Exception as e:
@@ -212,32 +263,16 @@ class ChatbotManager:
     def _manage_history_length(self):
         """Keep conversation history within reasonable limits"""
         if len(self.history) > Config.MAX_HISTORY_LENGTH:
-            # Keep system message and recent messages
-            system_msg = self.history[0]  # Keep system message
+            system_msg = self.history[0]
             recent_messages = self.history[-(Config.MAX_HISTORY_LENGTH-1):]
             self.history = [system_msg] + recent_messages
             logger.info("Conversation history trimmed")
-        """Keep conversation history within reasonable limits"""
-        if len(self.history) > Config.MAX_HISTORY_LENGTH:
-            # Keep system message and recent messages
-            system_msg = self.history[0]  # Keep system message 
-            recent_messages = self.history[-(Config.MAX_HISTORY_LENGTH-1):]
-            self.history = [system_msg] + recent_messages
-            logger.info("Conversation history trimmed")
-    
 
     def process_message(self, user_message: str) -> str:
         """Process a user message with minimal history to reduce hallucination"""
         try:
-            # Step 1: Use only current message - NO HISTORY
-            messages = [
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ]
+            messages = [{"role": "user", "content": user_message}]
 
-            # Step 2: Search for relevant tools
             tools_spec = []
             try:
                 top_tools = vector_tools.search_tools(user_message, top_k=Config.TOP_K_TOOLS)
@@ -246,11 +281,10 @@ class ChatbotManager:
             except Exception as e:
                 logger.warning(f"Error searching tools: {str(e)}. Proceeding without tools.")
 
-            # Step 3: First API call - just for tool detection
             api_params = {
                 "model": Config.DEFAULT_MODEL,
                 "messages": messages,
-                "temperature": 0.1,  # Low temperature for more consistent tool selection
+                "temperature": 0.1,
             }
 
             if tools_spec:
@@ -270,7 +304,6 @@ class ChatbotManager:
             if tool_calls:
                 logger.info(f"Executing {len(tool_calls)} tool calls")
                 
-                # Execute tools
                 tool_results = []
                 for tool_call in tool_calls:
                     try:
@@ -278,7 +311,7 @@ class ChatbotManager:
                         tool_name = tool_call.get("function", {}).get("name", "Unknown")
                         tool_results.append({
                             "tool": tool_name,
-                            "result": str(result)[:1000]  # Truncate long results
+                            "result": str(result)[:1000]
                         })
                     except Exception as e:
                         logger.error(f"Tool execution error: {str(e)}")
@@ -287,8 +320,6 @@ class ChatbotManager:
                             "result": f"Error: {str(e)}"
                         })
 
-                # Step 4: Fresh conversation for final response
-                # Create a new, clean message with just the facts
                 final_messages = [
                     {
                         "role": "user",
@@ -301,7 +332,7 @@ class ChatbotManager:
                     json={
                         "model": Config.DEFAULT_MODEL,
                         "messages": final_messages,
-                        "temperature": 0.1,  # Low temperature for factual responses
+                        "temperature": 0.1,
                     },
                     timeout=30
                 )
@@ -311,7 +342,6 @@ class ChatbotManager:
                 return final_data["choices"][0]["message"]["content"]
 
             else:
-                # No tools needed - return direct response
                 return response_message.get("content", "I couldn't generate a response.")
 
         except Exception as e:
@@ -321,7 +351,7 @@ class ChatbotManager:
     def get_conversation_stats(self) -> Dict[str, Any]:
         """Get statistics about the current conversation"""
         return {
-            "message_count": len(self.history) - 1,  # Exclude system message
+            "message_count": len(self.history) - 1,
             "available_tools": len(self.tool_functions),
             "tool_names": list(self.tool_functions.keys())
         }
@@ -336,8 +366,89 @@ class ChatbotManager:
 # Global chatbot manager instance
 chatbot = ChatbotManager()
 
+# Welcome page routes
 @app.route("/")
-def home():
+def welcome():
+    """Serve the welcome page"""
+    existing_specs = get_existing_specs()
+    return render_template("welcome.html", existing_specs=existing_specs)
+
+@app.route("/upload-api", methods=["POST"])
+def upload_file():
+    """Handle file upload of API spec and regenerate tools (AJAX-compatible)."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file selected'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if file.filename and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+
+        try:
+            file.save(filepath)
+            logger.info(f"Uploaded file saved: {filepath}")
+
+            success, message = run_tools_generator(filepath)
+            if success:
+                chatbot.reload_tools()
+                return jsonify({
+                    'message': 'API spec uploaded and tools generated successfully.',
+                    'redirect': url_for('chat_interface')
+                }), 200
+            else:
+                return jsonify({'error': f'Failed to generate tools: {message}'}), 500
+
+        except Exception as e:
+            logger.error(f"Error saving or processing file: {str(e)}")
+            return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+
+    return jsonify({'error': 'Invalid file type. Allowed types: yaml, yml, json'}), 400
+
+@app.route("/list-apis", methods=["GET"])
+def list_apis():
+    try:
+        files = os.listdir(Config.EXISTING_SPECS_FOLDER)
+    except Exception as e:
+        return jsonify({"error": str(e), "apis": []}), 500
+
+    apis = []
+    for f in files:
+        if f.lower().endswith(('.yaml', '.yml', '.json')):  # filter for valid spec files
+            apis.append({
+                "id": f,  # You can use the filename as ID
+                "name": f,
+                "uploaded_at": "unknown",  # TODO: add actual upload time if tracked
+                "endpoints": 0,             # TODO: count endpoints from spec if desired
+            })
+    return jsonify({"apis": apis})
+
+@app.route("/select-api", methods=["POST"])
+def select_existing():
+    selected_file = request.form.get('selected_file')
+    if not selected_file:
+        flash('No file selected')
+        return redirect(url_for('welcome'))
+    
+    filepath = os.path.join(Config.EXISTING_SPECS_FOLDER, selected_file)
+    if not os.path.exists(filepath):
+        flash('Selected file not found')
+        return redirect(url_for('welcome'))
+    
+    success, message = run_tools_generator(filepath)
+    
+    if success:
+        chatbot.reload_tools()
+        flash(f'API specification loaded and tools generated successfully!')
+        return redirect(url_for('chat_interface'))
+    else:
+        flash(f'Error generating tools: {message}')
+        return redirect(url_for('welcome'))
+
+@app.route("/chat")
+def chat_interface():
     """Serve the main chat interface"""
     return render_template("index.html")
 
@@ -357,12 +468,11 @@ def chat():
         if not isinstance(user_message, str):
             return jsonify({"error": "Message must be a string"}), 400
         
-        if len(user_message) > 4000:  # Reasonable message length limit
+        if len(user_message) > 4000:
             return jsonify({"error": "Message too long"}), 400
         
         logger.info(f"Processing message: {user_message[:100]}...")
         
-        # Process the message
         reply = chatbot.process_message(user_message)
         
         return jsonify({
@@ -417,4 +527,4 @@ def internal_error(error):
 if __name__ == "__main__":
     logger.info("Starting Flask chatbot application...")
     logger.info(f"Loaded {len(chatbot.tool_functions)} tools")
-    app.run(debug=True, host="0.0.0.0", port=8300)
+    app.run(debug=False, host="0.0.0.0", port=8300)

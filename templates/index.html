@@ -3,16 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DCT API Assistant</title>
+  <title>Open API Assistant</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
     ::-webkit-scrollbar {
       width: 8px;
     }
     ::-webkit-scrollbar-thumb {
-      background: #4b5563;
+      background: #6366f1;
       border-radius: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(139, 92, 246, 0.1);
     }
     .typing::after {
       content: "⠋";
@@ -23,32 +36,63 @@
       50% { opacity: 1; }
     }
     .markdown a {
-      color: #60a5fa;
+      color: #8b5cf6;
       text-decoration: underline;
     }
     .markdown code {
-      background: #1e293b;
-      padding: 2px 4px;
+      background: rgba(139, 92, 246, 0.2);
+      padding: 2px 6px;
       border-radius: 4px;
       font-family: monospace;
+      border: 1px solid rgba(139, 92, 246, 0.3);
     }
-    /* Input box max width and center form */
+    .markdown pre {
+      background: rgba(139, 92, 246, 0.1);
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+    /* Input box styling */
     #chat-input {
       max-width: 600px;
       font-size: 0.875rem;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
     }
     #chat-form {
       margin: 0 auto;
       max-width: 640px;
     }
+    /* Glassmorphism effects */
+    .glass {
+      background: rgba(139, 92, 246, 0.1);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+    .glass-dark {
+      background: rgba(30, 41, 59, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+    /* Message styling */
+    .user-message {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+    }
+    .bot-message {
+      background: rgba(30, 41, 59, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
   </style>
 </head>
-<body class="h-full flex">
+<body class="h-full flex gradient-bg">
 
   <!-- Sidebar -->
-  <aside class="w-64 bg-slate-800 border-r border-slate-700 flex flex-col p-4 space-y-4">
-    <button onclick="newChat()" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-semibold text-left">
-      + New Chat
+  <aside class="w-64 glass-dark border-r border-purple-500/20 flex flex-col p-4 space-y-4">
+    <button onclick="newChat()" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-4 py-3 rounded-xl font-semibold text-left card-hover shadow-lg">
+      ✨ New Chat
     </button>
     <div id="chat-list" class="flex-1 overflow-y-auto space-y-2"></div>
   </aside>
@@ -56,26 +100,43 @@
   <!-- Main Chat Window -->
   <div class="flex-1 flex flex-col">
     <!-- Header -->
-    <header class="flex items-center justify-between px-6 py-4 bg-slate-800 border-b border-slate-700">
+    <header class="flex items-center justify-between px-6 py-4 glass-dark border-b border-purple-500/20">
       <div class="flex items-center space-x-3">
-        <span class="text-2xl">🤖</span>
-        <h1 class="text-xl font-semibold">DCT API Assistant</h1>
+        <span class="text-3xl">🤖</span>
+        <div>
+          <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Open API Assistant</h1>
+          <p class="text-sm text-slate-300">Your intelligent API companion</p>
+        </div>
       </div>
-      <button onclick="clearHistory()" class="text-sm text-red-400 hover:text-red-300">Clear Current Chat</button>
+      <div class="flex items-center space-x-3">
+        <button onclick="clearHistory()" class="text-sm text-red-400 hover:text-red-300 bg-red-500/10 px-3 py-2 rounded-lg border border-red-500/20 hover:bg-red-500/20 transition">
+          🗑️ Clear Chat
+        </button>
+      </div>
     </header>
 
     <!-- Chat Area -->
-    <main id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-4"></main>
+    <main id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-6">
+      <!-- Welcome message when no chat is active -->
+      <div id="welcome-message" class="text-center py-12">
+        <div class="text-6xl mb-4">🤖</div>
+        <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Welcome to Open API Assistant</h2>
+        <p class="text-slate-300 mb-6">Start a new conversation or select an existing chat from the sidebar</p>
+        <button onclick="newChat()" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-6 py-3 rounded-xl font-semibold card-hover shadow-lg">
+          🚀 Start New Chat
+        </button>
+      </div>
+    </main>
 
     <!-- Input -->
-    <footer class="p-4 bg-slate-800 border-t border-slate-700">
-      <form id="chat-form" class="flex gap-2">
-        <input id="chat-input" type="text" required placeholder="Type your message..." class="flex-1 px-5 py-2 rounded-lg text-black focus:outline-none" />
-        <button type="button" id="mic-btn" class="bg-slate-600 hover:bg-slate-500 text-white px-4 py-2 rounded-lg font-semibold">
-        🎤
+    <footer class="p-6 glass-dark border-t border-purple-500/20">
+      <form id="chat-form" class="flex gap-3">
+        <input id="chat-input" type="text" required placeholder="Ask me about your API..." class="flex-1 px-5 py-3 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-lg" />
+        <button type="button" id="mic-btn" class="glass hover:bg-purple-500/20 text-white px-4 py-3 rounded-xl font-semibold card-hover shadow-lg border border-purple-500/30">
+          🎤
         </button>
-        <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg font-semibold">
-          Send
+        <button type="submit" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-6 py-3 rounded-xl font-semibold card-hover shadow-lg">
+          Send ✨
         </button>
       </form>
     </footer>
@@ -87,6 +148,7 @@
     const chatForm = document.getElementById('chat-form');
     const chatInput = document.getElementById('chat-input');
     const chatList = document.getElementById('chat-list');
+    const welcomeMessage = document.getElementById('welcome-message');
 
     let currentChatId = null;
     const STORAGE_INDEX_KEY = 'chat_sessions';
@@ -112,18 +174,22 @@
       chatList.innerHTML = '';
       sessions.forEach(session => {
         const btn = document.createElement('button');
-        btn.className = 'w-full text-left px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 flex justify-between items-center';
-        btn.textContent = session.title;
-
+        btn.className = 'w-full text-left px-4 py-3 rounded-xl glass hover:bg-purple-500/20 flex justify-between items-center card-hover group';
+        
+        const title = document.createElement('span');
+        title.textContent = session.title;
+        title.className = 'truncate flex-1';
+        
         const delBtn = document.createElement('button');
-        delBtn.textContent = '🗑️';
+        delBtn.innerHTML = '🗑️';
         delBtn.title = 'Delete Chat';
-        delBtn.className = 'ml-2 text-red-500 hover:text-red-400';
+        delBtn.className = 'ml-2 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity';
         delBtn.onclick = (e) => {
           e.stopPropagation();
           deleteChat(session.id);
         };
 
+        btn.appendChild(title);
         btn.appendChild(delBtn);
         btn.onclick = () => loadChat(session.id);
         chatList.appendChild(btn);
@@ -131,6 +197,8 @@
     }
 
     function deleteChat(chatId) {
+      if (!confirm('Delete this chat permanently?')) return;
+      
       // Remove chat from sessions
       let sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
       sessions = sessions.filter(s => s.id !== chatId);
@@ -139,13 +207,14 @@
       localStorage.removeItem(getChatKey(chatId));
       if (chatId === currentChatId) {
         currentChatId = null;
-        chatContainer.innerHTML = '';
+        showWelcome();
       }
       loadChatList();
     }
 
     function loadChat(chatId) {
       currentChatId = chatId;
+      welcomeMessage.style.display = 'none';
       chatContainer.innerHTML = '';
       const history = JSON.parse(localStorage.getItem(getChatKey(chatId)) || '[]');
       history.forEach(msg => {
@@ -153,10 +222,26 @@
       });
     }
 
+    function showWelcome() {
+      chatContainer.innerHTML = `
+        <div id="welcome-message" class="text-center py-12">
+          <div class="text-6xl mb-4">🤖</div>
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Welcome to Open API Assistant</h2>
+          <p class="text-slate-300 mb-6">Start a new conversation or select an existing chat from the sidebar</p>
+          <button onclick="newChat()" class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 px-6 py-3 rounded-xl font-semibold card-hover shadow-lg">
+            🚀 Start New Chat
+          </button>
+        </div>
+      `;
+    }
+
     function clearHistory() {
       if (currentChatId) {
-        localStorage.removeItem(getChatKey(currentChatId));
-        chatContainer.innerHTML = '';
+        if (confirm('Clear all messages in this chat?')) {
+          localStorage.removeItem(getChatKey(currentChatId));
+          chatContainer.innerHTML = '';
+          showWelcome();
+        }
       }
     }
 
@@ -164,46 +249,52 @@
       const newId = Date.now().toString();
       const chatTitle = title || `Chat ${new Date().toLocaleString([], { hour: '2-digit', minute: '2-digit', hour12: true })}`;
       const sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
-      sessions.push({ id: newId, title: chatTitle });
+      sessions.unshift({ id: newId, title: chatTitle }); // Add to beginning
       localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify(sessions));
       currentChatId = newId;
       chatContainer.innerHTML = '';
+      welcomeMessage.style.display = 'none';
       loadChatList();
     }
 
     function appendMessage(sender, text, isTyping = false, timestamp = null) {
+      // Hide welcome message when first message appears
+      if (welcomeMessage) {
+        welcomeMessage.style.display = 'none';
+      }
+
       const row = document.createElement('div');
-      row.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+      row.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} mb-4`;
 
       const avatar = document.createElement('div');
-      avatar.className = 'w-10 h-10 bg-slate-700 flex items-center justify-center rounded-full text-xl';
+      avatar.className = `w-10 h-10 glass flex items-center justify-center rounded-full text-xl shadow-lg ${sender === 'user' ? 'order-2 ml-3' : 'order-1 mr-3'}`;
       avatar.textContent = sender === 'user' ? '🧑' : '🤖';
 
       const msgWrapper = document.createElement('div');
-      msgWrapper.className = `ml-2 max-w-lg px-4 py-3 rounded-xl shadow whitespace-pre-wrap markdown ${
-        sender === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-700 text-white'
-      }`;
+      msgWrapper.className = `max-w-lg px-5 py-3 rounded-2xl shadow-lg whitespace-pre-wrap markdown ${
+        sender === 'user' ? 'user-message text-white' : 'bot-message text-white'
+      } ${sender === 'user' ? 'order-1' : 'order-2'}`;
 
-      msgWrapper.innerHTML = isTyping ? 'Typing...' : marked.parse(text || '');
+      if (isTyping) {
+        msgWrapper.innerHTML = '<span class="typing">Thinking</span>';
+        msgWrapper.classList.add('typing');
+      } else {
+        msgWrapper.innerHTML = marked.parse(text || '');
+      }
 
       const messageContainer = document.createElement('div');
-      messageContainer.className = 'flex flex-col space-y-1';
+      messageContainer.className = `flex flex-col space-y-1 ${sender === 'user' ? 'items-end order-1' : 'items-start order-2'}`;
       messageContainer.appendChild(msgWrapper);
 
       if (!isTyping && timestamp) {
         const time = document.createElement('span');
-        time.className = 'text-xs text-gray-400 mt-1';
+        time.className = 'text-xs text-slate-400 mt-1 px-2';
         time.textContent = timestamp;
         messageContainer.appendChild(time);
       }
 
-      if (sender === 'user') {
-        row.appendChild(messageContainer);
-        row.appendChild(avatar);
-      } else {
-        row.appendChild(avatar);
-        row.appendChild(messageContainer);
-      }
+      row.appendChild(avatar);
+      row.appendChild(messageContainer);
 
       chatContainer.appendChild(row);
       chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -217,7 +308,6 @@
       if (!message) return;
 
       if (!currentChatId) {
-        // Create new chat automatically if none exists
         newChat();
       }
 
@@ -240,7 +330,7 @@
         typingMsg.innerHTML = marked.parse(data.reply || 'No reply.');
         const botTimestamp = formatTimestamp();
         const time = document.createElement('span');
-        time.className = 'text-xs text-gray-400 mt-1';
+        time.className = 'text-xs text-slate-400 mt-1 px-2';
         time.textContent = botTimestamp;
         typingMsg.parentElement.appendChild(time);
         saveToHistory({ sender: 'bot', text: data.reply, timestamp: botTimestamp });
@@ -249,14 +339,14 @@
         const sessions = JSON.parse(localStorage.getItem(STORAGE_INDEX_KEY) || '[]');
         const currentSession = sessions.find(s => s.id === currentChatId);
         if (currentSession && currentSession.title.startsWith('Chat ')) {
-          currentSession.title = message.length > 20 ? message.slice(0, 20) + '…' : message;
+          currentSession.title = message.length > 25 ? message.slice(0, 25) + '…' : message;
           localStorage.setItem(STORAGE_INDEX_KEY, JSON.stringify(sessions));
           loadChatList();
         }
 
       } catch (err) {
         typingMsg.classList.remove('typing');
-        typingMsg.textContent = '⚠️ Error contacting the server.';
+        typingMsg.innerHTML = '⚠️ <span class="text-red-400">Error contacting the server. Please try again.</span>';
       }
     });
 
@@ -274,15 +364,20 @@
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
-        micBtn.textContent = '🎙️';
+        micBtn.innerHTML = '🎙️';
+        micBtn.classList.add('bg-red-500/20');
       };
 
       recognition.onresult = async (event) => {
-        micBtn.textContent = '🎤';
+        micBtn.innerHTML = '🎤';
+        micBtn.classList.remove('bg-red-500/20');
         const transcript = event.results[0][0].transcript;
         chatInput.value = transcript;
 
-        // Send transcript to /voice-chat endpoint
+        if (!currentChatId) {
+          newChat();
+        }
+
         const timestamp = formatTimestamp();
         appendMessage('user', transcript, false, timestamp);
         saveToHistory({ sender: 'user', text: transcript, timestamp });
@@ -301,23 +396,25 @@
           typingMsg.innerHTML = marked.parse(data.reply || 'No reply.');
           const botTimestamp = formatTimestamp();
           const time = document.createElement('span');
-          time.className = 'text-xs text-gray-400 mt-1';
+          time.className = 'text-xs text-slate-400 mt-1 px-2';
           time.textContent = botTimestamp;
           typingMsg.parentElement.appendChild(time);
           saveToHistory({ sender: 'bot', text: data.reply, timestamp: botTimestamp });
         } catch (err) {
           typingMsg.classList.remove('typing');
-          typingMsg.textContent = '⚠️ Error contacting the server.';
+          typingMsg.innerHTML = '⚠️ <span class="text-red-400">Error contacting the server. Please try again.</span>';
         }
       };
 
       recognition.onerror = () => {
-        micBtn.textContent = '🎤';
+        micBtn.innerHTML = '🎤';
+        micBtn.classList.remove('bg-red-500/20');
         alert('Error during speech recognition.');
       };
 
       recognition.onend = () => {
-        micBtn.textContent = '🎤';
+        micBtn.innerHTML = '🎤';
+        micBtn.classList.remove('bg-red-500/20');
       };
 
       recognition.start();
@@ -325,7 +422,7 @@
 
     // On page load
     loadChatList();
-    // Removed auto newChat on load - user clicks to create
+    showWelcome();
 
   </script>
 
