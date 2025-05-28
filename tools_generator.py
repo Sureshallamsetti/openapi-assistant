@@ -68,8 +68,10 @@ def openapi_to_tools(openapi_spec):
 
             operation_id = operation.get("operationId")
             if not operation_id:
-                continue
-
+                # fallback: generate from method + path
+                clean_path = path.strip("/").replace("/", "_").replace("{", "").replace("}", "")
+                operation_id = f"{method}_{clean_path}"
+                
             description = operation.get("description", f"{method.upper()} {path}")
             tool_params = {
                 "type": "object",

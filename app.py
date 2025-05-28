@@ -213,38 +213,49 @@ class ChatbotManager:
         """Keep conversation history within reasonable limits"""
         if len(self.history) > Config.MAX_HISTORY_LENGTH:
             # Keep system message and recent messages
+            system_msg = self.history[0]  # Keep system message
+            recent_messages = self.history[-(Config.MAX_HISTORY_LENGTH-1):]
+            self.history = [system_msg] + recent_messages
+            logger.info("Conversation history trimmed")
+        """Keep conversation history within reasonable limits"""
+        if len(self.history) > Config.MAX_HISTORY_LENGTH:
+            # Keep system message and recent messages
             system_msg = self.history[0]  # Keep system message 
             recent_messages = self.history[-(Config.MAX_HISTORY_LENGTH-1):]
             self.history = [system_msg] + recent_messages
             logger.info("Conversation history trimmed")
     
+
     def process_message(self, user_message: str) -> str:
-        """Process a user message and return the assistant's response"""
+        """Process a user message with minimal history to reduce hallucination"""
         try:
-            # Add user message to history
-            self.history.append({"role": "user", "content": user_message})
-            self._manage_history_length()
-            
-            # Search for relevant tools
+            # Step 1: Use only current message - NO HISTORY
+            messages = [
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ]
+
+            # Step 2: Search for relevant tools
+            tools_spec = []
             try:
                 top_tools = vector_tools.search_tools(user_message, top_k=Config.TOP_K_TOOLS)
                 tools_spec = self._get_tools_spec_for_names(top_tools)
                 logger.info(f"Found {len(tools_spec)} relevant tools")
             except Exception as e:
                 logger.warning(f"Error searching tools: {str(e)}. Proceeding without tools.")
-                tools_spec = []
-            
-            # Prepare API call to Ollama
+
+            # Step 3: First API call - just for tool detection
             api_params = {
                 "model": Config.DEFAULT_MODEL,
-                "messages": self.history,
-                "format": "json",  # Ensure structured output
+                "messages": messages,
+                "temperature": 0.1,  # Low temperature for more consistent tool selection
             }
-            
+
             if tools_spec:
                 api_params["tools"] = tools_spec
-            
-            # Call Ollama API
+
             response = requests.post(
                 f"{Config.OLLAMA_API_URL}/chat/completions",
                 json=api_params,
@@ -252,63 +263,60 @@ class ChatbotManager:
             )
             response.raise_for_status()
             response_data = response.json()
-            
-            # Parse response
+
             response_message = response_data["choices"][0]["message"]
             tool_calls = response_message.get("tool_calls")
-            
+
             if tool_calls:
-                 # Execute tool calls
                 logger.info(f"Executing {len(tool_calls)} tool calls")
                 
-                # Add the assistant's message with tool calls to history first
-                self.history.append({
-                    "role": "assistant",
-                    "content": response_message.get("content", ""),
-                    "tool_calls": tool_calls
-                })
-                
-                # Execute each tool call and add results to history
+                # Execute tools
+                tool_results = []
                 for tool_call in tool_calls:
-                    result = self._execute_tool_call(tool_call)
-                    self.history.append({
-                        "role": "tool",
-                        "content": result,
-                        "tool_call_id": tool_call["id"]
-                    })
-                
-                # Make a second API call to get the final response based on tool results
+                    try:
+                        result = self._execute_tool_call(tool_call)
+                        tool_name = tool_call.get("function", {}).get("name", "Unknown")
+                        tool_results.append({
+                            "tool": tool_name,
+                            "result": str(result)[:1000]  # Truncate long results
+                        })
+                    except Exception as e:
+                        logger.error(f"Tool execution error: {str(e)}")
+                        tool_results.append({
+                            "tool": tool_call.get("function", {}).get("name", "Unknown"),
+                            "result": f"Error: {str(e)}"
+                        })
+
+                # Step 4: Fresh conversation for final response
+                # Create a new, clean message with just the facts
+                final_messages = [
+                    {
+                        "role": "user",
+                        "content": f"Question: {user_message}\n\nTool Results: {tool_results}\n\nProvide a direct answer based only on the tool results above."
+                    }
+                ]
+
                 final_response = requests.post(
                     f"{Config.OLLAMA_API_URL}/chat/completions",
                     json={
                         "model": Config.DEFAULT_MODEL,
-                        "messages": self.history,
-                        "format": "json"
+                        "messages": final_messages,
+                        "temperature": 0.1,  # Low temperature for factual responses
                     },
                     timeout=30
                 )
                 final_response.raise_for_status()
-                final_response_data = final_response.json()
+                final_data = final_response.json()
                 
-                assistant_reply = final_response_data["choices"][0]["message"]["content"] or "I apologize, but I couldn't generate a response based on the tool results."
-                self.history.append({"role": "assistant", "content": assistant_reply})
-                
+                return final_data["choices"][0]["message"]["content"]
+
             else:
-                # Regular response without tools
-                assistant_reply = response_message.get("content", "I apologize, but I couldn't generate a response.")
-                self.history.append({"role": "assistant", "content": assistant_reply})
-            
-            return assistant_reply
-            
-        except requests.RequestException as e:
-            error_msg = f"Ollama API error: {str(e)}"
-            logger.error(error_msg)
-            return "I'm experiencing technical difficulties. Please try again later."
-            
+                # No tools needed - return direct response
+                return response_message.get("content", "I couldn't generate a response.")
+
         except Exception as e:
-            error_msg = f"Unexpected error processing message: {str(e)}"
-            logger.error(error_msg)
-            return "An unexpected error occurred. Please try again."
+            logger.error(f"Error: {str(e)}")
+            return "I encountered an error processing your request."
     
     def get_conversation_stats(self) -> Dict[str, Any]:
         """Get statistics about the current conversation"""
